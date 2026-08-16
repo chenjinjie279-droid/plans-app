@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#3b6ef5">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'">
+  <title>计划表</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">📅 计划表</div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="long">长期计划</button>
+      <button class="tab" data-tab="short">短期计划</button>
+    </nav>
+    <div class="header-actions">
+      <span id="saveState" class="save-state hidden"></span>
+      <button id="btnExport" class="btn btn-ghost" title="把全部数据保存为一个 JSON 文件">导出备份</button>
+      <button id="btnImport" class="btn btn-ghost" title="从 JSON 备份文件恢复数据">导入备份</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 长期计划 -->
+    <section id="view-long" class="view active">
+      <div class="view-toolbar">
+        <div class="toolbar-info">
+          <h2>长期计划</h2>
+          <p class="hint">以「年」或「月」为时间单位 · 可勾选任务点标记完成进度 · 附带备注</p>
+        </div>
+        <button id="btnNewLong" class="btn btn-primary">+ 新建长期计划</button>
+      </div>
+      <div id="longList" class="card-list"></div>
+      <div id="longEmpty" class="empty-tip hidden">还没有长期计划,点击右上角「+ 新建长期计划」开始吧</div>
+    </section>
+
+    <!-- 短期计划 -->
+    <section id="view-short" class="view">
+      <div class="view-toolbar">
+        <div class="toolbar-info">
+          <h2>短期计划</h2>
+          <p class="hint">选择起止时间段 · 时间段内的每一天都可以单独记录内容,过去与未来始终保留、随时修改</p>
+        </div>
+        <button id="btnNewShort" class="btn btn-primary">+ 新建短期计划</button>
+      </div>
+      <div id="shortList" class="card-list"></div>
+      <div id="shortEmpty" class="empty-tip hidden">还没有短期计划,点击右上角「+ 新建短期计划」开始吧</div>
+    </section>
+  </main>
+
+  <!-- 每日记录编辑弹层 -->
+  <div id="dayModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <span id="dayModalDate" class="modal-title"></span>
+        <button id="dayModalClose" class="btn btn-ghost">✕</button>
+      </div>
+      <textarea id="dayModalText" placeholder="记录这一天的内容…(过去或未来的每一天都可以填写,之后随时可修改)"></textarea>
+      <div class="modal-foot">
+        <button id="dayModalSave" class="btn btn-primary">保存</button>
+        <button id="dayModalClear" class="btn btn-ghost">清空</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
