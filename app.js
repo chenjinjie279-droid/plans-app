@@ -167,19 +167,7 @@ function longCardHTML(p) {
   <article class="card long-card" data-plan-id="${p.id}">
     <div class="card-head">
       <input class="plan-title" value="${escAttr(p.title)}" placeholder="计划标题">
-      <div class="period-controls">
-        <select class="period-type">
-          <option value="year" ${p.periodType !== 'month' ? 'selected' : ''}>按年</option>
-          <option value="month" ${p.periodType === 'month' ? 'selected' : ''}>按月</option>
-        </select>
-        <select class="period-year">${yearOptions(p.periodValue)}</select>
-        <select class="period-month${monthHidden}">${monthOptions(p.periodValue)}</select>
-      </div>
       <button class="btn btn-danger btn-delete" title="删除计划">删除</button>
-    </div>
-    <div class="field">
-      <label>计划内容</label>
-      <textarea class="plan-content" placeholder="写下这个长期计划的具体内容…">${escText(p.content || '')}</textarea>
     </div>
     <div class="field">
       <label>任务点 <span class="task-progress">完成 ${done}/${total}${total ? ' · ' + pct + '%' : ''}</span></label>
@@ -190,6 +178,17 @@ function longCardHTML(p) {
     <div class="field">
       <label>备注</label>
       <textarea class="plan-note" placeholder="补充说明…">${escText(p.note || '')}</textarea>
+    </div>
+    <div class="field">
+      <label>时间</label>
+      <div class="period-controls">
+        <select class="period-type">
+          <option value="year" ${p.periodType !== 'month' ? 'selected' : ''}>按年</option>
+          <option value="month" ${p.periodType === 'month' ? 'selected' : ''}>按月</option>
+        </select>
+        <select class="period-year">${yearOptions(p.periodValue)}</select>
+        <select class="period-month${monthHidden}">${monthOptions(p.periodValue)}</select>
+      </div>
     </div>
   </article>`;
 }
@@ -232,24 +231,40 @@ function renderShort() {
 function shortCardHTML(p) {
   const st = p.startDate || todayKey();
   const en = p.endDate || addDays(st, 6);
+  const done = (p.tasks || []).filter(t => t.done).length;
+  const total = (p.tasks || []).length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+
+  const tasks = (p.tasks || []).map(t => `
+    <div class="task-row${t.done ? ' done' : ''}" data-task-id="${t.id}">
+      <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''}>
+      <input class="task-text" value="${escAttr(t.text)}">
+      <button class="task-del" title="删除任务点">✕</button>
+    </div>`).join('');
+
   return `
   <article class="card short-card" data-plan-id="${p.id}">
     <div class="card-head">
       <input class="plan-title" value="${escAttr(p.title)}" placeholder="计划标题">
+      <button class="btn btn-danger btn-delete" title="删除计划">删除</button>
+    </div>
+    <div class="field">
+      <label>任务点 <span class="task-progress">完成 ${done}/${total}${total ? ' · ' + pct + '%' : ''}</span></label>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="task-list">${tasks}</div>
+      <button class="btn btn-sm btn-add-task">+ 添加任务点</button>
+    </div>
+    <div class="field">
+      <label>备注</label>
+      <textarea class="plan-note" placeholder="补充说明…">${escText(p.note || '')}</textarea>
+    </div>
+    <div class="field">
+      <label>时间段</label>
       <div class="date-range">
         <input type="date" class="start-date" value="${st}">
         <span>~</span>
         <input type="date" class="end-date" value="${en}">
       </div>
-      <button class="btn btn-danger btn-delete" title="删除计划">删除</button>
-    </div>
-    <div class="field">
-      <label>计划内容</label>
-      <textarea class="plan-content" placeholder="写下这个短期计划的具体内容…">${escText(p.content || '')}</textarea>
-    </div>
-    <div class="field">
-      <label>备注</label>
-      <textarea class="plan-note" placeholder="补充说明…">${escText(p.note || '')}</textarea>
     </div>
     <div class="field daily-area">
       <label>每日记录<span class="hint">(时间段内的每一天都可单独填写,过去与未来始终保留、随时修改)</span>
@@ -346,16 +361,14 @@ function updateShortPlan(planId, patch) {
   return p;
 }
 
-function syncShortCardFromDom(cardEl) {
-  const planId = cardEl.dataset.planId;
-  const p = state.shortTermPlans.find(x => x.id === planId);
-  if (!p) return;
-  p.title = cardEl.querySelector('.plan-title').value;
-  p.content = cardEl.querySelector('.plan-content').value;
-  p.note = cardEl.querySelector('.plan-note').value;
-  p.startDate = cardEl.querySelector('.start-date').value || p.startDate;
-  p.endDate = cardEl.querySelector('.end-date').value || p.endDate;
-  p.updatedAt = new Date().toISOString();
+function updateTaskProgress(card, plan) {
+  const done = (plan.tasks || []).filter(t => t.done).length;
+  const total = (plan.tasks || []).length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  const label = card.querySelector('.task-progress');
+  if (label) label.textContent = `完成 ${done}/${total}${total ? ' · ' + pct + '%' : ''}`;
+  const fill = card.querySelector('.progress-fill');
+  if (fill) fill.style.width = pct + '%';
 }
 
 /* ---------- 长期计划:数据操作 ---------- */
@@ -374,7 +387,6 @@ function newLongPlan() {
   const plan = {
     id: uid(),
     title: '新的长期计划',
-    content: '',
     periodType: 'year',
     periodValue: String(new Date().getFullYear()),
     tasks: [{ id: uid(), text: '第一个任务点', done: false }],
@@ -394,9 +406,9 @@ function newShortPlan() {
   const plan = {
     id: uid(),
     title: '新的短期计划',
-    content: '',
     startDate: today,
     endDate: addDays(today, 6),
+    tasks: [{ id: uid(), text: '第一个任务点', done: false }],
     note: '',
     dailyNotes: {},
     viewMode: 'calendar',
@@ -476,8 +488,6 @@ function bindEvents() {
     const id = card.dataset.planId;
     if (e.target.classList.contains('plan-title')) {
       updateLongPlan(id, { title: e.target.value });
-    } else if (e.target.classList.contains('plan-content')) {
-      updateLongPlan(id, { content: e.target.value });
     } else if (e.target.classList.contains('plan-note')) {
       updateLongPlan(id, { note: e.target.value });
     } else if (e.target.classList.contains('task-text')) {
@@ -520,11 +530,7 @@ function bindEvents() {
         task.done = e.target.checked;
         scheduleSave();
         row.classList.toggle('done', task.done);
-        const done = plan.tasks.filter(t => t.done).length;
-        const total = plan.tasks.length;
-        const pct = total ? Math.round(done / total * 100) : 0;
-        card.querySelector('.task-progress').textContent = `完成 ${done}/${total}${total ? ' · ' + pct + '%' : ''}`;
-        card.querySelector('.progress-fill').style.width = pct + '%';
+        updateTaskProgress(card, plan);
       }
     }
   });
@@ -540,8 +546,9 @@ function bindEvents() {
       plan.tasks.push({ id: uid(), text: '新任务点', done: false });
       scheduleSave();
       renderLong();
-      const rows = card.querySelectorAll('.task-row');
-      const el = rows[rows.length - 1] && rows[rows.length - 1].querySelector('.task-text');
+      const newCard = document.querySelector(`.long-card[data-plan-id="${id}"]`);
+      const rows = newCard && newCard.querySelectorAll('.task-row');
+      const el = rows && rows[rows.length - 1] && rows[rows.length - 1].querySelector('.task-text');
       if (el) { el.focus(); el.select(); }
     } else if (e.target.classList.contains('task-del')) {
       const row = e.target.closest('.task-row');
@@ -566,10 +573,14 @@ function bindEvents() {
     const id = card.dataset.planId;
     if (e.target.classList.contains('plan-title')) {
       updateShortPlan(id, { title: e.target.value });
-    } else if (e.target.classList.contains('plan-content')) {
-      updateShortPlan(id, { content: e.target.value });
     } else if (e.target.classList.contains('plan-note')) {
       updateShortPlan(id, { note: e.target.value });
+    } else if (e.target.classList.contains('task-text')) {
+      // 任务点文本
+      const row = e.target.closest('.task-row');
+      const p = state.shortTermPlans.find(x => x.id === id);
+      const task = p && p.tasks && p.tasks.find(t => t.id === row.dataset.taskId);
+      if (task) { task.text = e.target.value; scheduleSave(); }
     } else if (e.target.matches('input[data-date]')) {
       // 列表视图的每日输入
       const key = e.target.dataset.date;
@@ -603,6 +614,15 @@ function bindEvents() {
       scheduleSave();
       // 只重绘该卡片的日历/列表区域,不重建整个列表
       renderDailyArea(card, plan);
+    } else if (e.target.classList.contains('task-check')) {
+      const row = e.target.closest('.task-row');
+      const task = plan.tasks && plan.tasks.find(t => t.id === row.dataset.taskId);
+      if (task) {
+        task.done = e.target.checked;
+        scheduleSave();
+        row.classList.toggle('done', task.done);
+        updateTaskProgress(card, plan);
+      }
     }
   });
 
@@ -620,6 +640,20 @@ function bindEvents() {
         scheduleSave();
         renderShort();
       }
+    } else if (e.target.classList.contains('btn-add-task')) {
+      if (!plan.tasks) plan.tasks = [];
+      plan.tasks.push({ id: uid(), text: '新任务点', done: false });
+      scheduleSave();
+      renderShort();
+      const newCard = document.querySelector(`.short-card[data-plan-id="${id}"]`);
+      const rows = newCard && newCard.querySelectorAll('.task-row');
+      const el = rows && rows[rows.length - 1] && rows[rows.length - 1].querySelector('.task-text');
+      if (el) { el.focus(); el.select(); }
+    } else if (e.target.classList.contains('task-del')) {
+      const row = e.target.closest('.task-row');
+      plan.tasks = (plan.tasks || []).filter(t => t.id !== row.dataset.taskId);
+      scheduleSave();
+      renderShort();
     } else if (e.target.classList.contains('vt-btn')) {
       plan.viewMode = e.target.dataset.mode;
       scheduleSave();
