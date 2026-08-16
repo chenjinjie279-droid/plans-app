@@ -252,12 +252,13 @@ main {
 .task-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fafbfe;
   transition: opacity 0.2s;
+  flex-wrap: wrap;
 }
 .task-row.done { opacity: 0.55; background: #f2f7f2; }
 .task-row.done .task-text { text-decoration: line-through; color: var(--muted); }
@@ -271,6 +272,7 @@ main {
 }
 .task-text {
   flex: 1;
+  min-width: 120px;
   border: 1px solid transparent;
   background: transparent;
   padding: 3px 6px;
@@ -281,6 +283,18 @@ main {
 }
 .task-text:hover { border-color: var(--border); }
 .task-text:focus { outline: none; border-color: var(--primary); background: #fff; }
+.task-date {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+  width: 138px;
+  flex-shrink: 0;
+}
+.task-date:focus { outline: none; border-color: var(--primary); }
 .task-del { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; }
 .task-del:hover { color: var(--red); }
 

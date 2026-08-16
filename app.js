@@ -159,7 +159,8 @@ function longCardHTML(p) {
   const tasks = (p.tasks || []).map(t => `
     <div class="task-row${t.done ? ' done' : ''}" data-task-id="${t.id}">
       <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''}>
-      <input class="task-text" value="${escAttr(t.text)}">
+      <input class="task-text" value="${escAttr(t.text)}" placeholder="任务内容">
+      <input type="date" class="task-date" value="${escAttr(t.date || '')}" title="任务日期">
       <button class="task-del" title="删除任务点">✕</button>
     </div>`).join('');
 
@@ -238,7 +239,8 @@ function shortCardHTML(p) {
   const tasks = (p.tasks || []).map(t => `
     <div class="task-row${t.done ? ' done' : ''}" data-task-id="${t.id}">
       <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''}>
-      <input class="task-text" value="${escAttr(t.text)}">
+      <input class="task-text" value="${escAttr(t.text)}" placeholder="任务内容">
+      <input type="date" class="task-date" value="${escAttr(t.date || '')}" title="任务日期">
       <button class="task-del" title="删除任务点">✕</button>
     </div>`).join('');
 
@@ -389,7 +391,7 @@ function newLongPlan() {
     title: '新的长期计划',
     periodType: 'year',
     periodValue: String(new Date().getFullYear()),
-    tasks: [{ id: uid(), text: '第一个任务点', done: false }],
+    tasks: [{ id: uid(), text: '第一个任务点', done: false, date: '' }],
     note: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -408,7 +410,7 @@ function newShortPlan() {
     title: '新的短期计划',
     startDate: today,
     endDate: addDays(today, 6),
-    tasks: [{ id: uid(), text: '第一个任务点', done: false }],
+    tasks: [{ id: uid(), text: '第一个任务点', done: false, date: '' }],
     note: '',
     dailyNotes: {},
     viewMode: 'calendar',
@@ -532,6 +534,10 @@ function bindEvents() {
         row.classList.toggle('done', task.done);
         updateTaskProgress(card, plan);
       }
+    } else if (e.target.classList.contains('task-date')) {
+      const row = e.target.closest('.task-row');
+      const task = plan.tasks.find(t => t.id === row.dataset.taskId);
+      if (task) { task.date = e.target.value || ''; scheduleSave(); }
     }
   });
 
@@ -623,6 +629,10 @@ function bindEvents() {
         row.classList.toggle('done', task.done);
         updateTaskProgress(card, plan);
       }
+    } else if (e.target.classList.contains('task-date')) {
+      const row = e.target.closest('.task-row');
+      const task = plan.tasks && plan.tasks.find(t => t.id === row.dataset.taskId);
+      if (task) { task.date = e.target.value || ''; scheduleSave(); }
     }
   });
 
