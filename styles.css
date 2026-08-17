@@ -213,9 +213,8 @@ main {
 }
 .field textarea:focus { outline: none; border-color: var(--primary); }
 
-/* ---------- 期间选择 ---------- */
-.period-controls { display: flex; gap: 8px; align-items: center; }
-.period-controls select, .date-range input, .modal textarea {
+/* ---------- 期间/日期选择 ---------- */
+.date-range input, .daily-range input, .modal textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 10px;
@@ -224,10 +223,12 @@ main {
   background: #fff;
   color: var(--text);
 }
-.period-controls select:focus, .date-range input:focus { outline: none; border-color: var(--primary); }
+.date-range input:focus, .daily-range input:focus { outline: none; border-color: var(--primary); }
 
-.date-range { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
-.date-range input { padding: 5px 8px; }
+.date-range, .daily-range { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+.date-range input, .daily-range input { padding: 5px 8px; }
+.daily-range { margin: 8px 0 10px; }
+.daily-range-label { font-weight: 600; color: var(--text); flex-shrink: 0; }
 
 /* ---------- 任务点 ---------- */
 .task-progress { font-weight: 400; color: var(--green); }
@@ -283,7 +284,7 @@ main {
 }
 .task-text:hover { border-color: var(--border); }
 .task-text:focus { outline: none; border-color: var(--primary); background: #fff; }
-.task-date {
+.task-date, .task-start, .task-end {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 3px 6px;
@@ -291,10 +292,11 @@ main {
   font-family: inherit;
   color: var(--text);
   background: #fff;
-  width: 138px;
+  width: 128px;
   flex-shrink: 0;
 }
-.task-date:focus { outline: none; border-color: var(--primary); }
+.task-date:focus, .task-start:focus, .task-end:focus { outline: none; border-color: var(--primary); }
+.task-range-sep { color: var(--muted); flex-shrink: 0; font-size: 13px; }
 .task-del { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; }
 .task-del:hover { color: var(--red); }
 

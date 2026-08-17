@@ -154,13 +154,14 @@ function longCardHTML(p) {
   const done = (p.tasks || []).filter(t => t.done).length;
   const total = (p.tasks || []).length;
   const pct = total ? Math.round(done / total * 100) : 0;
-  const monthHidden = p.periodType !== 'month' ? ' hidden' : '';
 
   const tasks = (p.tasks || []).map(t => `
     <div class="task-row${t.done ? ' done' : ''}" data-task-id="${t.id}">
       <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''}>
       <input class="task-text" value="${escAttr(t.text)}" placeholder="任务内容">
-      <input type="date" class="task-date" value="${escAttr(t.date || '')}" title="任务日期">
+      <input type="date" class="task-start" value="${escAttr(t.startDate || '')}" title="开始日期">
+      <span class="task-range-sep">~</span>
+      <input type="date" class="task-end" value="${escAttr(t.endDate || '')}" title="截止日期">
       <button class="task-del" title="删除任务点">✕</button>
     </div>`).join('');
 
@@ -180,36 +181,7 @@ function longCardHTML(p) {
       <label>备注</label>
       <textarea class="plan-note" placeholder="补充说明…">${escText(p.note || '')}</textarea>
     </div>
-    <div class="field">
-      <label>时间</label>
-      <div class="period-controls">
-        <select class="period-type">
-          <option value="year" ${p.periodType !== 'month' ? 'selected' : ''}>按年</option>
-          <option value="month" ${p.periodType === 'month' ? 'selected' : ''}>按月</option>
-        </select>
-        <select class="period-year">${yearOptions(p.periodValue)}</select>
-        <select class="period-month${monthHidden}">${monthOptions(p.periodValue)}</select>
-      </div>
-    </div>
   </article>`;
-}
-
-function yearOptions(current) {
-  const y = current ? Number(current.slice(0, 4)) : new Date().getFullYear();
-  let html = '';
-  for (let i = 2015; i <= 2045; i++) {
-    html += `<option value="${i}" ${i === y ? 'selected' : ''}>${i} 年</option>`;
-  }
-  return html;
-}
-
-function monthOptions(periodValue) {
-  const m = periodValue ? Number(periodValue.split('-')[1]) : new Date().getMonth() + 1;
-  let html = '';
-  for (let i = 1; i <= 12; i++) {
-    html += `<option value="${i}" ${i === m ? 'selected' : ''}>${i} 月</option>`;
-  }
-  return html;
 }
 
 /* ---------- 渲染:短期计划 ---------- */
@@ -240,7 +212,9 @@ function shortCardHTML(p) {
     <div class="task-row${t.done ? ' done' : ''}" data-task-id="${t.id}">
       <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''}>
       <input class="task-text" value="${escAttr(t.text)}" placeholder="任务内容">
-      <input type="date" class="task-date" value="${escAttr(t.date || '')}" title="任务日期">
+      <input type="date" class="task-start" value="${escAttr(t.startDate || '')}" title="开始日期">
+      <span class="task-range-sep">~</span>
+      <input type="date" class="task-end" value="${escAttr(t.endDate || '')}" title="截止日期">
       <button class="task-del" title="删除任务点">✕</button>
     </div>`).join('');
 
@@ -260,14 +234,6 @@ function shortCardHTML(p) {
       <label>备注</label>
       <textarea class="plan-note" placeholder="补充说明…">${escText(p.note || '')}</textarea>
     </div>
-    <div class="field">
-      <label>时间段</label>
-      <div class="date-range">
-        <input type="date" class="start-date" value="${st}">
-        <span>~</span>
-        <input type="date" class="end-date" value="${en}">
-      </div>
-    </div>
     <div class="field daily-area">
       <label>每日记录<span class="hint">(时间段内的每一天都可单独填写,过去与未来始终保留、随时修改)</span>
         <span class="view-toggle">
@@ -275,6 +241,12 @@ function shortCardHTML(p) {
           <button class="vt-btn" data-mode="list">列表</button>
         </span>
       </label>
+      <div class="daily-range">
+        <span class="daily-range-label">时间段</span>
+        <input type="date" class="start-date" value="${st}">
+        <span>~</span>
+        <input type="date" class="end-date" value="${en}">
+      </div>
       <div class="calendar-wrap"></div>
       <div class="day-list" hidden></div>
     </div>
@@ -389,9 +361,7 @@ function newLongPlan() {
   const plan = {
     id: uid(),
     title: '新的长期计划',
-    periodType: 'year',
-    periodValue: String(new Date().getFullYear()),
-    tasks: [{ id: uid(), text: '第一个任务点', done: false, date: '' }],
+    tasks: [{ id: uid(), text: '第一个任务点', done: false, startDate: '', endDate: '' }],
     note: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -410,7 +380,7 @@ function newShortPlan() {
     title: '新的短期计划',
     startDate: today,
     endDate: addDays(today, 6),
-    tasks: [{ id: uid(), text: '第一个任务点', done: false, date: '' }],
+    tasks: [{ id: uid(), text: '第一个任务点', done: false, startDate: '', endDate: '' }],
     note: '',
     dailyNotes: {},
     viewMode: 'calendar',
@@ -507,25 +477,7 @@ function bindEvents() {
     const plan = state.longTermPlans.find(p => p.id === id);
     if (!plan) return;
 
-    if (e.target.classList.contains('period-type')) {
-      plan.periodType = e.target.value;
-      if (plan.periodType === 'year') {
-        plan.periodValue = String(new Date().getFullYear());
-      } else {
-        plan.periodValue = `${plan.periodValue.slice(0, 4)}-${pad2(new Date().getMonth() + 1)}`;
-      }
-      scheduleSave();
-      renderLong();
-    } else if (e.target.classList.contains('period-year')) {
-      const m = plan.periodType === 'month' ? pad2(Number(plan.periodValue.split('-')[1]) || 1) : '';
-      plan.periodValue = m ? `${e.target.value}-${m}` : e.target.value;
-      scheduleSave();
-      renderLong();
-    } else if (e.target.classList.contains('period-month')) {
-      plan.periodValue = `${plan.periodValue.slice(0, 4)}-${pad2(Number(e.target.value))}`;
-      scheduleSave();
-      renderLong();
-    } else if (e.target.classList.contains('task-check')) {
+    if (e.target.classList.contains('task-check')) {
       const row = e.target.closest('.task-row');
       const task = plan.tasks.find(t => t.id === row.dataset.taskId);
       if (task) {
@@ -534,10 +486,14 @@ function bindEvents() {
         row.classList.toggle('done', task.done);
         updateTaskProgress(card, plan);
       }
-    } else if (e.target.classList.contains('task-date')) {
+    } else if (e.target.classList.contains('task-start') || e.target.classList.contains('task-end')) {
       const row = e.target.closest('.task-row');
       const task = plan.tasks.find(t => t.id === row.dataset.taskId);
-      if (task) { task.date = e.target.value || ''; scheduleSave(); }
+      if (task) {
+        const key = e.target.classList.contains('task-start') ? 'startDate' : 'endDate';
+        task[key] = e.target.value || '';
+        scheduleSave();
+      }
     }
   });
 
@@ -629,10 +585,14 @@ function bindEvents() {
         row.classList.toggle('done', task.done);
         updateTaskProgress(card, plan);
       }
-    } else if (e.target.classList.contains('task-date')) {
+    } else if (e.target.classList.contains('task-start') || e.target.classList.contains('task-end')) {
       const row = e.target.closest('.task-row');
       const task = plan.tasks && plan.tasks.find(t => t.id === row.dataset.taskId);
-      if (task) { task.date = e.target.value || ''; scheduleSave(); }
+      if (task) {
+        const key = e.target.classList.contains('task-start') ? 'startDate' : 'endDate';
+        task[key] = e.target.value || '';
+        scheduleSave();
+      }
     }
   });
 
