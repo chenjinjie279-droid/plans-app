@@ -15,7 +15,7 @@
     <div class="brand">📅 计划表</div>
     <nav class="tabs">
       <button class="tab active" data-tab="long">长期计划</button>
-      <button class="tab" data-tab="short">短期计划</button>
+      <button class="tab" data-tab="short">每日计划</button>
     </nav>
     <div class="header-actions">
       <span id="saveState" class="save-state hidden"></span>
@@ -38,34 +38,32 @@
       <div id="longEmpty" class="empty-tip hidden">还没有长期计划,点击右上角「+ 新建长期计划」开始吧</div>
     </section>
 
-    <!-- 短期计划 -->
+    <!-- 每日计划 -->
     <section id="view-short" class="view">
       <div class="view-toolbar">
         <div class="toolbar-info">
-          <h2>短期计划</h2>
-          <p class="hint">选择起止时间段 · 时间段内的每一天都可以单独记录内容,过去与未来始终保留、随时修改</p>
+          <h2>每日计划</h2>
+          <p class="hint">在日历上选择日期 · 查看以前的计划、制定以后的计划 · 每一天的计划一直保留、随时可修改</p>
         </div>
-        <button id="btnNewShort" class="btn btn-primary">+ 新建短期计划</button>
       </div>
-      <div id="shortList" class="card-list"></div>
-      <div id="shortEmpty" class="empty-tip hidden">还没有短期计划,点击右上角「+ 新建短期计划」开始吧</div>
+      <div class="card calendar-card">
+        <div class="calendar-nav">
+          <button class="cal-nav-btn" data-nav="-1">‹ 上月</button>
+          <span id="dailyCalTitle" class="cal-title"></span>
+          <button class="cal-nav-btn" data-nav="1">下月 ›</button>
+        </div>
+        <div id="dailyCal" class="calendar"></div>
+      </div>
+      <div class="card plan-card">
+        <div class="plan-card-head">
+          <span id="dailyDateLabel" class="daily-date-label"></span>
+        </div>
+        <div id="dailyEmpty" class="empty-tip hidden">这一天还没有计划,点击下方「+ 添加计划」开始</div>
+        <div id="dailyTasks" class="task-list"></div>
+        <button id="btnAddDailyTask" class="btn btn-sm btn-add-task">+ 添加计划</button>
+      </div>
     </section>
   </main>
-
-  <!-- 每日记录编辑弹层 -->
-  <div id="dayModal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-head">
-        <span id="dayModalDate" class="modal-title"></span>
-        <button id="dayModalClose" class="btn btn-ghost">✕</button>
-      </div>
-      <textarea id="dayModalText" placeholder="记录这一天的内容…(过去或未来的每一天都可以填写,之后随时可修改)"></textarea>
-      <div class="modal-foot">
-        <button id="dayModalSave" class="btn btn-primary">保存</button>
-        <button id="dayModalClear" class="btn btn-ghost">清空</button>
-      </div>
-    </div>
-  </div>
 
   <script src="app.js"></script>
 </body>

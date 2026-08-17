@@ -1,7 +1,7 @@
 /* ============================================================
  * 计划表 — 渲染进程逻辑
- * 长期计划:按年/月,任务点勾选,备注
- * 短期计划:起止时间段,时间段内每一天可记录、始终可改
+ * 长期计划:任务点(勾选+内容+起止日期)、备注
+ * 每日计划:日历定位日期,当天计划(勾选+内容+时间段)
  * ============================================================ */
 
 'use strict';
@@ -93,11 +93,11 @@ function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
 /* ---------- 全局状态 ---------- */
 let state = { longTermPlans: [], shortTermPlans: [] };
 
-/* 每个短期计划当前浏览的日历月份 {planId: {y, m}} */
-const calState = {};
+/* 每日计划:日历当前浏览的月份 */
+let calState = { y: 0, m: 0 };
 
-/* 弹层当前编辑目标 */
-let modalTarget = null; // { planId, dateKey }
+/* 每日计划:当前选中的日期 'YYYY-MM-DD' */
+let selectedDate = todayKey();
 
 /* ---------- 数据持久化 ---------- */
 let saveTimer = null;
@@ -119,22 +119,83 @@ function showSaveState(ok) {
   el._t = setTimeout(() => el.classList.add('hidden'), 1200);
 }
 
-/* ---------- 弹层 ---------- */
-function openDayModal(planId, dateKey) {
-  modalTarget = { planId, dateKey };
-  const plan = state.shortTermPlans.find(p => p.id === planId);
-  if (!plan) return;
-  document.getElementById('dayModalDate').textContent =
-    `${dateKey} ${weekdayOf(dateKey)}${dateKey === todayKey() ? '(今天)' : ''}`;
-  const ta = document.getElementById('dayModalText');
-  ta.value = (plan.dailyNotes && plan.dailyNotes[dateKey]) || '';
-  document.getElementById('dayModal').classList.remove('hidden');
-  setTimeout(() => ta.focus(), 30);
+/* ---------- 渲染:每日计划 ---------- */
+function dailyPlanFor(dateKey) {
+  return state.shortTermPlans.find(p => p.date === dateKey) || null;
 }
 
-function closeDayModal() {
-  document.getElementById('dayModal').classList.add('hidden');
-  modalTarget = null;
+function getOrCreateDailyPlan(dateKey) {
+  let p = dailyPlanFor(dateKey);
+  if (!p) {
+    p = { id: uid(), date: dateKey, tasks: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    state.shortTermPlans.push(p);
+  }
+  return p;
+}
+
+function renderShort() {
+  renderDailyCal();
+  renderDailyTasks();
+}
+
+function renderDailyCal() {
+  if (!calState.y) {
+    const d = parseDate(selectedDate);
+    calState = { y: d.getFullYear(), m: d.getMonth() };
+  }
+  const { y, m } = calState;
+  document.getElementById('dailyCalTitle').textContent = `${y} 年 ${m + 1} 月`;
+  const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7; // 周一=0
+  const dim = daysInMonth(y, m);
+  const today = todayKey();
+  const hasPlan = new Set(
+    state.shortTermPlans.filter(p => p.tasks && p.tasks.length).map(p => p.date)
+  );
+
+  let cells = '';
+  let count = 0;
+  for (let i = 0; i < firstWeekday; i++) { cells += '<div class="cal-day"></div>'; count++; }
+  for (let day = 1; day <= dim; day++) {
+    const key = `${y}-${pad2(m + 1)}-${pad2(day)}`;
+    const cls = ['cal-day'];
+    if (key === today) cls.push('today');
+    if (hasPlan.has(key)) cls.push('has-note');
+    if (key === selectedDate) cls.push('selected');
+    cells += `<div class="${cls.join(' ')}" data-date="${key}">${day}</div>`;
+    count++;
+  }
+  while (count % 7 !== 0) { cells += '<div class="cal-day"></div>'; count++; }
+
+  const weekdays = '<div class="cal-weekday">一</div><div class="cal-weekday">二</div><div class="cal-weekday">三</div>' +
+    '<div class="cal-weekday">四</div><div class="cal-weekday">五</div><div class="cal-weekday">六</div><div class="cal-weekday">日</div>';
+  document.getElementById('dailyCal').innerHTML = weekdays + cells;
+}
+
+function renderDailyTasks() {
+  document.getElementById('dailyDateLabel').textContent =
+    `${selectedDate} ${weekdayOf(selectedDate)}${selectedDate === todayKey() ? '(今天)' : ''}`;
+  const plan = dailyPlanFor(selectedDate);
+  const listEl = document.getElementById('dailyTasks');
+  document.getElementById('dailyEmpty').classList.toggle('hidden', !!(plan && plan.tasks && plan.tasks.length));
+  if (!plan || !plan.tasks || !plan.tasks.length) { listEl.innerHTML = ''; return; }
+  listEl.innerHTML = plan.tasks.map(t => `
+    <div class="task-row${t.done ? ' done' : ''}" data-task-id="${t.id}">
+      <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''}>
+      <input class="task-text" value="${escAttr(t.text)}" placeholder="计划内容">
+      <input class="task-time" value="${escAttr(t.timeRange || '')}" placeholder="时间段,如 14:00-16:00">
+      <button class="task-del" title="删除">✕</button>
+    </div>`).join('');
+}
+
+function addDailyTask() {
+  const plan = getOrCreateDailyPlan(selectedDate);
+  plan.tasks.push({ id: uid(), text: '', done: false, timeRange: '' });
+  plan.updatedAt = new Date().toISOString();
+  scheduleSave();
+  renderShort();
+  const rows = document.querySelectorAll('#dailyTasks .task-row');
+  const el = rows[rows.length - 1] && rows[rows.length - 1].querySelector('.task-text');
+  if (el) el.focus();
 }
 
 /* ---------- 渲染:长期计划 ---------- */
@@ -184,161 +245,6 @@ function longCardHTML(p) {
   </article>`;
 }
 
-/* ---------- 渲染:短期计划 ---------- */
-function renderShort() {
-  const listEl = document.getElementById('shortList');
-  document.getElementById('shortEmpty').classList.toggle('hidden', state.shortTermPlans.length > 0);
-
-  const sorted = [...state.shortTermPlans].sort((a, b) =>
-    (b.createdAt || '').localeCompare(a.createdAt || ''));
-
-  listEl.innerHTML = sorted.map(plan => shortCardHTML(plan)).join('');
-
-  // 渲染每个卡片的日历/列表
-  listEl.querySelectorAll('.short-card').forEach(el => {
-    const plan = state.shortTermPlans.find(p => p.id === el.dataset.planId);
-    if (plan) renderDailyArea(el, plan);
-  });
-}
-
-function shortCardHTML(p) {
-  const done = (p.tasks || []).filter(t => t.done).length;
-  const total = (p.tasks || []).length;
-  const pct = total ? Math.round(done / total * 100) : 0;
-
-  const tasks = (p.tasks || []).map(t => `
-    <div class="task-row${t.done ? ' done' : ''}" data-task-id="${t.id}">
-      <input type="checkbox" class="task-check" ${t.done ? 'checked' : ''}>
-      <input class="task-text" value="${escAttr(t.text)}" placeholder="任务内容">
-      <input type="date" class="task-start" value="${escAttr(t.startDate || '')}" title="开始日期">
-      <span class="task-range-sep">~</span>
-      <input type="date" class="task-end" value="${escAttr(t.endDate || '')}" title="截止日期">
-      <button class="task-del" title="删除任务点">✕</button>
-    </div>`).join('');
-
-  return `
-  <article class="card short-card" data-plan-id="${p.id}">
-    <div class="card-head">
-      <input class="plan-title" value="${escAttr(p.title)}" placeholder="计划标题">
-      <button class="btn btn-danger btn-delete" title="删除计划">删除</button>
-    </div>
-    <div class="field">
-      <label>任务点 <span class="task-progress">完成 ${done}/${total}${total ? ' · ' + pct + '%' : ''}</span></label>
-      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <div class="task-list">${tasks}</div>
-      <button class="btn btn-sm btn-add-task">+ 添加任务点</button>
-    </div>
-    <div class="field">
-      <label>备注</label>
-      <textarea class="plan-note" placeholder="补充说明…">${escText(p.note || '')}</textarea>
-    </div>
-    <div class="field daily-area">
-      <label>每日记录<span class="hint">(范围自动取任务点的开始~截止日期,每一天都可单独填写、随时修改)</span>
-        <span class="view-toggle">
-          <button class="vt-btn active" data-mode="calendar">日历</button>
-          <button class="vt-btn" data-mode="list">列表</button>
-        </span>
-      </label>
-      <div class="calendar-wrap"></div>
-      <div class="day-list" hidden></div>
-    </div>
-  </article>`;
-}
-
-/** 每日记录范围:自动取所有任务点的最早开始日期 ~ 最晚截止日期;无任务日期时默认今天起 7 天 */
-function planDateRange(plan) {
-  const dates = [];
-  (plan.tasks || []).forEach(t => {
-    if (t.startDate) dates.push(t.startDate);
-    if (t.endDate) dates.push(t.endDate);
-  });
-  dates.sort();
-  if (dates.length) return { start: dates[0], end: dates[dates.length - 1] };
-  const start = todayKey();
-  return { start, end: addDays(start, 6) };
-}
-
-function renderDailyArea(cardEl, plan) {
-  const { start, end } = planDateRange(plan);
-  const mode = plan.viewMode || 'calendar';
-  const nav = cardEl.querySelector('.view-toggle');
-  nav.querySelectorAll('.vt-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.mode === mode));
-
-  const calWrap = cardEl.querySelector('.calendar-wrap');
-  const dayList = cardEl.querySelector('.day-list');
-  calWrap.hidden = mode !== 'calendar';
-  dayList.hidden = mode !== 'list';
-
-  if (mode === 'calendar') renderCalendar(cardEl, plan);
-  else renderDayList(dayList, plan);
-}
-
-function renderCalendar(cardEl, plan) {
-  const wrap = cardEl.querySelector('.calendar-wrap');
-  const id = plan.id;
-  if (!calState[id]) {
-    const d = parseDate(planDateRange(plan).start);
-    calState[id] = { y: d.getFullYear(), m: d.getMonth() };
-  }
-  const { y, m } = calState[id];
-  const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7; // 周一=0
-  const dim = daysInMonth(y, m);
-  const today = todayKey();
-  const { start, end } = planDateRange(plan);
-
-  let cells = '';
-  let cellCount = 0;
-  for (let i = 0; i < firstWeekday; i++) { cells += '<div class="cal-day"></div>'; cellCount++; }
-
-  for (let day = 1; day <= dim; day++) {
-    const key = `${y}-${pad2(m + 1)}-${pad2(day)}`;
-    const inRange = (!start || key >= start) && (!end || key <= end);
-    const hasNote = plan.dailyNotes && plan.dailyNotes[key];
-    const cls = ['cal-day'];
-    if (inRange) cls.push('in-range');
-    if (key === today) cls.push('today');
-    if (hasNote) cls.push('has-note');
-    cells += `<div class="${cls.join(' ')}" data-date="${key}">${day}</div>`;
-    cellCount++;
-  }
-  while (cellCount % 7 !== 0) { cells += '<div class="cal-day"></div>'; cellCount++; }
-
-  wrap.innerHTML = `
-    <div class="calendar-nav">
-      <button class="cal-nav-btn" data-nav="-1">‹ 上月</button>
-      <span class="cal-title">${y} 年 ${m + 1} 月</span>
-      <button class="cal-nav-btn" data-nav="1">下月 ›</button>
-    </div>
-    <div class="calendar">
-      <div class="cal-weekday">一</div><div class="cal-weekday">二</div><div class="cal-weekday">三</div>
-      <div class="cal-weekday">四</div><div class="cal-weekday">五</div><div class="cal-weekday">六</div>
-      <div class="cal-weekday">日</div>
-      ${cells}
-    </div>`;
-}
-
-function renderDayList(listEl, plan) {
-  const today = todayKey();
-  const { start, end } = planDateRange(plan);
-  if (!start || !end) { listEl.innerHTML = '<div class="hint">请先为任务点设置日期</div>'; return; }
-  const rows = dateRange(start, end).map(key => `
-    <div class="day-row">
-      <span class="day-label${key === today ? ' today' : ''}">${key} ${weekdayOf(key)}${key === today ? ' 今天' : ''}</span>
-      <input type="text" data-date="${key}" value="${escAttr((plan.dailyNotes && plan.dailyNotes[key]) || '')}" placeholder="记录这一天的内容…">
-    </div>`).join('');
-  listEl.innerHTML = rows;
-}
-
-/* ---------- 短期计划:数据操作 ---------- */
-function updateShortPlan(planId, patch) {
-  const p = state.shortTermPlans.find(x => x.id === planId);
-  if (!p) return;
-  Object.assign(p, patch);
-  p.updatedAt = new Date().toISOString();
-  scheduleSave();
-  return p;
-}
 
 function updateTaskProgress(card, plan) {
   const done = (plan.tasks || []).filter(t => t.done).length;
@@ -378,24 +284,6 @@ function newLongPlan() {
   if (el) { el.focus(); el.select(); }
 }
 
-function newShortPlan() {
-  const plan = {
-    id: uid(),
-    title: '新的短期计划',
-    tasks: [{ id: uid(), text: '第一个任务点', done: false, startDate: '', endDate: '' }],
-    note: '',
-    dailyNotes: {},
-    viewMode: 'calendar',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-  state.shortTermPlans.push(plan);
-  renderShort();
-  scheduleSave();
-  const el = document.querySelector(`.short-card[data-plan-id="${plan.id}"] .plan-title`);
-  if (el) { el.focus(); el.select(); }
-}
-
 /* ---------- 转义 ---------- */
 function escAttr(s) {
   return String(s == null ? '' : s)
@@ -423,7 +311,7 @@ function bindEvents() {
 
   /* 新建 */
   document.getElementById('btnNewLong').addEventListener('click', newLongPlan);
-  document.getElementById('btnNewShort').addEventListener('click', newShortPlan);
+  document.getElementById('btnAddDailyTask').addEventListener('click', addDailyTask);
 
   /* 导出 / 导入 */
   const doExport = async () => {
@@ -530,138 +418,58 @@ function bindEvents() {
     }
   });
 
-  /* ---------- 短期计划卡片事件 ---------- */
-  document.getElementById('shortList').addEventListener('input', (e) => {
-    const card = e.target.closest('.short-card');
-    if (!card) return;
-    const id = card.dataset.planId;
-    if (e.target.classList.contains('plan-title')) {
-      updateShortPlan(id, { title: e.target.value });
-    } else if (e.target.classList.contains('plan-note')) {
-      updateShortPlan(id, { note: e.target.value });
-    } else if (e.target.classList.contains('task-text')) {
-      // 任务点文本
-      const row = e.target.closest('.task-row');
-      const p = state.shortTermPlans.find(x => x.id === id);
-      const task = p && p.tasks && p.tasks.find(t => t.id === row.dataset.taskId);
-      if (task) { task.text = e.target.value; scheduleSave(); }
-    } else if (e.target.matches('input[data-date]')) {
-      // 列表视图的每日输入
-      const key = e.target.dataset.date;
-      const p = state.shortTermPlans.find(x => x.id === id);
-      if (!p) return;
-      if (!p.dailyNotes) p.dailyNotes = {};
-      if (e.target.value) p.dailyNotes[key] = e.target.value;
-      else delete p.dailyNotes[key];
-      scheduleSave();
-    }
-  });
-
-  /* 短期计划:起止日期(change 事件,避免输入时重绘丢焦点) */
-  document.getElementById('shortList').addEventListener('change', (e) => {
-    const card = e.target.closest('.short-card');
-    if (!card) return;
-    const id = card.dataset.planId;
-    const plan = state.shortTermPlans.find(x => x.id === id);
-    if (!plan) return;
-    if (e.target.classList.contains('task-check')) {
-      const row = e.target.closest('.task-row');
-      const task = plan.tasks && plan.tasks.find(t => t.id === row.dataset.taskId);
-      if (task) {
-        task.done = e.target.checked;
-        scheduleSave();
-        row.classList.toggle('done', task.done);
-        updateTaskProgress(card, plan);
-      }
-    } else if (e.target.classList.contains('task-start') || e.target.classList.contains('task-end')) {
-      const row = e.target.closest('.task-row');
-      const task = plan.tasks && plan.tasks.find(t => t.id === row.dataset.taskId);
-      if (task) {
-        const key = e.target.classList.contains('task-start') ? 'startDate' : 'endDate';
-        task[key] = e.target.value || '';
-        scheduleSave();
-      }
-    }
-  });
-
-  document.getElementById('shortList').addEventListener('click', (e) => {
-    const card = e.target.closest('.short-card');
-    if (!card) return;
-    const id = card.dataset.planId;
-    const plan = state.shortTermPlans.find(p => p.id === id);
-    if (!plan) return;
-
-    if (e.target.classList.contains('btn-delete')) {
-      if (confirm('确定删除这个短期计划吗?包括它每一天的记录,删除后不可恢复。')) {
-        state.shortTermPlans = state.shortTermPlans.filter(p => p.id !== id);
-        delete calState[id];
-        scheduleSave();
-        renderShort();
-      }
-    } else if (e.target.classList.contains('btn-add-task')) {
-      if (!plan.tasks) plan.tasks = [];
-      plan.tasks.push({ id: uid(), text: '新任务点', done: false });
-      scheduleSave();
-      renderShort();
-      const newCard = document.querySelector(`.short-card[data-plan-id="${id}"]`);
-      const rows = newCard && newCard.querySelectorAll('.task-row');
-      const el = rows && rows[rows.length - 1] && rows[rows.length - 1].querySelector('.task-text');
-      if (el) { el.focus(); el.select(); }
-    } else if (e.target.classList.contains('task-del')) {
-      const row = e.target.closest('.task-row');
-      plan.tasks = (plan.tasks || []).filter(t => t.id !== row.dataset.taskId);
-      scheduleSave();
-      renderShort();
-    } else if (e.target.classList.contains('vt-btn')) {
-      plan.viewMode = e.target.dataset.mode;
-      scheduleSave();
-      renderShort();
-    } else if (e.target.classList.contains('cal-nav-btn')) {
-      const cs = calState[id];
-      const delta = Number(e.target.dataset.nav);
-      let m = cs.m + delta;
-      let y = cs.y;
+  /* ---------- 每日计划事件 ---------- */
+  document.querySelector('.calendar-card').addEventListener('click', (e) => {
+    if (e.target.classList.contains('cal-nav-btn')) {
+      let m = calState.m + Number(e.target.dataset.nav);
+      let y = calState.y;
       if (m < 0) { m = 11; y--; }
       if (m > 11) { m = 0; y++; }
-      calState[id] = { y, m };
-      renderCalendar(card, plan);
+      calState = { y, m };
+      renderDailyCal();
     } else if (e.target.classList.contains('cal-day') && e.target.dataset.date) {
-      const key = e.target.dataset.date;
-      const { start, end } = planDateRange(plan);
-      if (key >= start && key <= end) {
-        openDayModal(id, key);
-      }
+      selectedDate = e.target.dataset.date;
+      renderDailyCal();
+      renderDailyTasks();
     }
   });
 
-  /* 每日记录弹层 */
-  document.getElementById('dayModalSave').addEventListener('click', () => {
-    if (!modalTarget) return;
-    const { planId, dateKey } = modalTarget;
-    const p = state.shortTermPlans.find(x => x.id === planId);
-    if (!p) return;
-    const val = document.getElementById('dayModalText').value;
-    if (!p.dailyNotes) p.dailyNotes = {};
-    if (val.trim()) p.dailyNotes[dateKey] = val;
-    else delete p.dailyNotes[dateKey];
+  const dailyTasksEl = document.getElementById('dailyTasks');
+  dailyTasksEl.addEventListener('input', (e) => {
+    const row = e.target.closest('.task-row');
+    if (!row) return;
+    const plan = dailyPlanFor(selectedDate);
+    if (!plan) return;
+    const task = plan.tasks.find(t => t.id === row.dataset.taskId);
+    if (!task) return;
+    if (e.target.classList.contains('task-text')) task.text = e.target.value;
+    else if (e.target.classList.contains('task-time')) task.timeRange = e.target.value;
     scheduleSave();
-    closeDayModal();
-    // 局部重绘该卡片的日历/列表
-    const card = document.querySelector(`.short-card[data-plan-id="${planId}"]`);
-    if (card) renderDailyArea(card, p);
   });
 
-  document.getElementById('dayModalClear').addEventListener('click', () => {
-    document.getElementById('dayModalText').value = '';
+  dailyTasksEl.addEventListener('change', (e) => {
+    const row = e.target.closest('.task-row');
+    if (!row) return;
+    const plan = dailyPlanFor(selectedDate);
+    if (!plan) return;
+    const task = plan.tasks.find(t => t.id === row.dataset.taskId);
+    if (!task) return;
+    if (e.target.classList.contains('task-check')) {
+      task.done = e.target.checked;
+      row.classList.toggle('done', task.done);
+      scheduleSave();
+    }
   });
 
-  document.getElementById('dayModalClose').addEventListener('click', closeDayModal);
-  document.getElementById('dayModal').addEventListener('click', (e) => {
-    if (e.target.id === 'dayModal') closeDayModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !document.getElementById('dayModal').classList.contains('hidden')) {
-      closeDayModal();
+  dailyTasksEl.addEventListener('click', (e) => {
+    if (e.target.classList.contains('task-del')) {
+      const row = e.target.closest('.task-row');
+      const plan = dailyPlanFor(selectedDate);
+      if (!plan) return;
+      plan.tasks = plan.tasks.filter(t => t.id !== row.dataset.taskId);
+      plan.updatedAt = new Date().toISOString();
+      scheduleSave();
+      renderDailyTasks();
     }
   });
 }
