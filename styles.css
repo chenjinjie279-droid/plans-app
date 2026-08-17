@@ -213,8 +213,8 @@ main {
 }
 .field textarea:focus { outline: none; border-color: var(--primary); }
 
-/* ---------- 期间/日期选择 ---------- */
-.date-range input, .daily-range input, .modal textarea {
+/* ---------- 日期/输入框 ---------- */
+.modal textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 10px;
@@ -223,12 +223,6 @@ main {
   background: #fff;
   color: var(--text);
 }
-.date-range input:focus, .daily-range input:focus { outline: none; border-color: var(--primary); }
-
-.date-range, .daily-range { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
-.date-range input, .daily-range input { padding: 5px 8px; }
-.daily-range { margin: 8px 0 10px; }
-.daily-range-label { font-weight: 600; color: var(--text); flex-shrink: 0; }
 
 /* ---------- 任务点 ---------- */
 .task-progress { font-weight: 400; color: var(--green); }

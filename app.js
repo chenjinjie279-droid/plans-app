@@ -190,7 +190,7 @@ function renderShort() {
   document.getElementById('shortEmpty').classList.toggle('hidden', state.shortTermPlans.length > 0);
 
   const sorted = [...state.shortTermPlans].sort((a, b) =>
-    (b.startDate || '').localeCompare(a.startDate || ''));
+    (b.createdAt || '').localeCompare(a.createdAt || ''));
 
   listEl.innerHTML = sorted.map(plan => shortCardHTML(plan)).join('');
 
@@ -202,8 +202,6 @@ function renderShort() {
 }
 
 function shortCardHTML(p) {
-  const st = p.startDate || todayKey();
-  const en = p.endDate || addDays(st, 6);
   const done = (p.tasks || []).filter(t => t.done).length;
   const total = (p.tasks || []).length;
   const pct = total ? Math.round(done / total * 100) : 0;
@@ -235,26 +233,33 @@ function shortCardHTML(p) {
       <textarea class="plan-note" placeholder="补充说明…">${escText(p.note || '')}</textarea>
     </div>
     <div class="field daily-area">
-      <label>每日记录<span class="hint">(时间段内的每一天都可单独填写,过去与未来始终保留、随时修改)</span>
+      <label>每日记录<span class="hint">(范围自动取任务点的开始~截止日期,每一天都可单独填写、随时修改)</span>
         <span class="view-toggle">
           <button class="vt-btn active" data-mode="calendar">日历</button>
           <button class="vt-btn" data-mode="list">列表</button>
         </span>
       </label>
-      <div class="daily-range">
-        <span class="daily-range-label">时间段</span>
-        <input type="date" class="start-date" value="${st}">
-        <span>~</span>
-        <input type="date" class="end-date" value="${en}">
-      </div>
       <div class="calendar-wrap"></div>
       <div class="day-list" hidden></div>
     </div>
   </article>`;
 }
 
+/** 每日记录范围:自动取所有任务点的最早开始日期 ~ 最晚截止日期;无任务日期时默认今天起 7 天 */
+function planDateRange(plan) {
+  const dates = [];
+  (plan.tasks || []).forEach(t => {
+    if (t.startDate) dates.push(t.startDate);
+    if (t.endDate) dates.push(t.endDate);
+  });
+  dates.sort();
+  if (dates.length) return { start: dates[0], end: dates[dates.length - 1] };
+  const start = todayKey();
+  return { start, end: addDays(start, 6) };
+}
+
 function renderDailyArea(cardEl, plan) {
-  const start = plan.startDate, end = plan.endDate;
+  const { start, end } = planDateRange(plan);
   const mode = plan.viewMode || 'calendar';
   const nav = cardEl.querySelector('.view-toggle');
   nav.querySelectorAll('.vt-btn').forEach(b =>
@@ -273,14 +278,14 @@ function renderCalendar(cardEl, plan) {
   const wrap = cardEl.querySelector('.calendar-wrap');
   const id = plan.id;
   if (!calState[id]) {
-    const d = parseDate(plan.startDate || todayKey());
+    const d = parseDate(planDateRange(plan).start);
     calState[id] = { y: d.getFullYear(), m: d.getMonth() };
   }
   const { y, m } = calState[id];
   const firstWeekday = (new Date(y, m, 1).getDay() + 6) % 7; // 周一=0
   const dim = daysInMonth(y, m);
   const today = todayKey();
-  const start = plan.startDate, end = plan.endDate;
+  const { start, end } = planDateRange(plan);
 
   let cells = '';
   let cellCount = 0;
@@ -314,9 +319,9 @@ function renderCalendar(cardEl, plan) {
 }
 
 function renderDayList(listEl, plan) {
-  const start = plan.startDate, end = plan.endDate;
   const today = todayKey();
-  if (!start || !end) { listEl.innerHTML = '<div class="hint">请先选择起止日期</div>'; return; }
+  const { start, end } = planDateRange(plan);
+  if (!start || !end) { listEl.innerHTML = '<div class="hint">请先为任务点设置日期</div>'; return; }
   const rows = dateRange(start, end).map(key => `
     <div class="day-row">
       <span class="day-label${key === today ? ' today' : ''}">${key} ${weekdayOf(key)}${key === today ? ' 今天' : ''}</span>
@@ -374,12 +379,9 @@ function newLongPlan() {
 }
 
 function newShortPlan() {
-  const today = todayKey();
   const plan = {
     id: uid(),
     title: '新的短期计划',
-    startDate: today,
-    endDate: addDays(today, 6),
     tasks: [{ id: uid(), text: '第一个任务点', done: false, startDate: '', endDate: '' }],
     note: '',
     dailyNotes: {},
@@ -562,21 +564,7 @@ function bindEvents() {
     const id = card.dataset.planId;
     const plan = state.shortTermPlans.find(x => x.id === id);
     if (!plan) return;
-    if (e.target.classList.contains('start-date') || e.target.classList.contains('end-date')) {
-      const sv = card.querySelector('.start-date').value;
-      const ev = card.querySelector('.end-date').value;
-      if (sv && ev && ev < sv) {
-        alert('结束日期不能早于开始日期,已自动交换。');
-        const tmp = sv; plan.startDate = ev; plan.endDate = tmp;
-      } else {
-        if (sv) plan.startDate = sv;
-        if (ev) plan.endDate = ev;
-      }
-      plan.updatedAt = new Date().toISOString();
-      scheduleSave();
-      // 只重绘该卡片的日历/列表区域,不重建整个列表
-      renderDailyArea(card, plan);
-    } else if (e.target.classList.contains('task-check')) {
+    if (e.target.classList.contains('task-check')) {
       const row = e.target.closest('.task-row');
       const task = plan.tasks && plan.tasks.find(t => t.id === row.dataset.taskId);
       if (task) {
@@ -639,7 +627,8 @@ function bindEvents() {
       renderCalendar(card, plan);
     } else if (e.target.classList.contains('cal-day') && e.target.dataset.date) {
       const key = e.target.dataset.date;
-      if ((!plan.startDate || key >= plan.startDate) && (!plan.endDate || key <= plan.endDate)) {
+      const { start, end } = planDateRange(plan);
+      if (key >= start && key <= end) {
         openDayModal(id, key);
       }
     }
